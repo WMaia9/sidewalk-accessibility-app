@@ -1,17 +1,16 @@
 # ---- Core runtime (CPU) ----
-tensorflow-cpu==2.20.0
-keras==3.5.0
+tensorflow
 
 # ---- App/UI ----
-streamlit==1.39.0
+streamlit
 
 # ---- Data / utils ----
-numpy==1.26.4
-pandas==2.2.2
-pillow==10.4.0
+numpy
+pandas
+pillow
 
 # ---- Compatibility pins (TF needs protobuf < 5) ----
-protobuf==4.25.3
+protobuf
 
 # ---- Only needed if you load .h5 checkpoints (safe to keep)
-h5py==3.11.0
+h5py
