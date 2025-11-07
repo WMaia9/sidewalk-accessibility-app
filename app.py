@@ -17,7 +17,9 @@ import tensorflow as tf
 st.set_page_config(page_title="Sidewalk Accessibility (Multi-Head)", layout="wide")
 
 DEFAULT_IMG_SIZE = 512
-DEFAULT_MODEL_PATH = "best_multitask.keras"
+
+# Updated: List of available models
+AVAILABLE_MODELS = ["best_multitask.keras", "best_multitask2.keras"]
 
 CLASS_NAMES = ["no", "unsure", "yes"]
 
@@ -26,8 +28,9 @@ CLASS_NAMES = ["no", "unsure", "yes"]
 # =============================
 @st.cache_resource(show_spinner=False)
 def load_model_cached(model_path: str):
-    """Load a multi-output Keras model once (cached)."""
-    # compile=False is usually safer for inference-only
+    """Load a multi-output Keras model once (cached by path)."""
+    # Clears cache if a new model is selected to avoid memory bloat if switching often
+    # (Optional depending on your server RAM)
     model = tf.keras.models.load_model(model_path, compile=False)
     return model
 
@@ -36,6 +39,7 @@ def load_image_any(path: Path, img_size: int) -> Tuple[np.ndarray, Image.Image]:
     """Load an image; return (float32 [H,W,3] in [0, 255], PIL)."""
     pil = Image.open(path).convert("RGB")
     pil = pil.resize((img_size, img_size))
+    # Keep in [0, 255] range for MobileNetV2
     arr = np.asarray(pil, dtype=np.float32)
     return arr, pil
 
@@ -43,7 +47,6 @@ def load_image_any(path: Path, img_size: int) -> Tuple[np.ndarray, Image.Image]:
 def preprocess_for_mobilenet(arr: np.ndarray) -> np.ndarray:
     """Match training: [0, 255] float -> MobileNetV2 preprocess_input ([-1,1])."""
     x = arr.astype(np.float32)
-    # if you ever pass CHW by mistake, fix to HWC
     if x.ndim == 3 and x.shape[-1] not in (1, 3) and x.shape[0] in (1, 3):
         x = np.transpose(x, (1, 2, 0))
     return tf.keras.applications.mobilenet_v2.preprocess_input(x)
@@ -83,12 +86,10 @@ def find_image_by_id(image_root: Path, image_id: str) -> Path | None:
     image_id = str(image_id)
     exts = (".jpg", ".jpeg", ".png", ".webp")
     if image_root and image_root.exists():
-         # Quick check for exact match first
         for ext in exts:
             candidate = image_root / (image_id + ext)
             if candidate.exists():
                 return candidate
-        # Slower rglob if needed
         for p in image_root.rglob("*"):
             if p.suffix.lower() in exts and p.stem == image_id:
                 return p
@@ -100,7 +101,7 @@ def predict_all_heads(model: tf.keras.Model, img_np: np.ndarray) -> Dict[str, np
     Forward pass. Returns dict: head_name -> (3,) probabilities in CLASS_NAMES order.
     """
     x = preprocess_for_mobilenet(img_np)
-    x = np.expand_dims(x, axis=0)  # (1,H,W,3)
+    x = np.expand_dims(x, axis=0)
 
     outputs = model(x, training=False)
     out: Dict[str, np.ndarray] = {}
@@ -108,11 +109,10 @@ def predict_all_heads(model: tf.keras.Model, img_np: np.ndarray) -> Dict[str, np
     if isinstance(outputs, (list, tuple)) and hasattr(model, "output_names"):
         outputs = {name: outputs[i] for i, name in enumerate(model.output_names)}
     elif not isinstance(outputs, dict):
-         # Fallback for single output models just in case
          outputs = {model.output_names[0]: outputs}
 
     for head_name, vec in outputs.items():
-        a = np.asarray(vec)[0].astype(np.float32)  # (3,)
+        a = np.asarray(vec)[0].astype(np.float32)
         if _is_prob_vector(a):
             p = a / max(a.sum(), 1e-9)
         else:
@@ -143,6 +143,7 @@ def make_results_table(
                 "decision": CLASS_NAMES[pred_i],
             }
         )
+    # Swapped order: argmax before decision
     df = pd.DataFrame(rows, columns=["MobilityAid", "p_no", "p_unsure", "p_yes", "argmax", "decision"])
     return df
 
@@ -152,7 +153,9 @@ def make_results_table(
 # =============================
 st.sidebar.header("Settings")
 
-model_path = st.sidebar.text_input("Model path (.keras/.h5)", DEFAULT_MODEL_PATH)
+# CHANGED: Replaced text_input with selectbox for the two models
+model_path = st.sidebar.selectbox("Select Model", AVAILABLE_MODELS)
+
 img_size = st.sidebar.number_input("Image size", min_value=96, max_value=1024, value=DEFAULT_IMG_SIZE, step=32)
 
 st.sidebar.subheader("Decision policy")
@@ -185,7 +188,7 @@ if not Path(model_path).exists():
     st.warning(f"Model not found at: {model_path}")
     st.stop()
 
-with st.spinner("Loading model…"):
+with st.spinner(f"Loading {model_path}…"):
     model = load_model_cached(model_path)
 
 # Get image tensor
@@ -196,7 +199,6 @@ chosen_pil = None
 if uploaded_img is not None:
     pil = Image.open(uploaded_img).convert("RGB")
     pil = pil.resize((img_size, img_size))
-    # BUG FIX: keep [0, 255] range here too
     img_np = np.asarray(pil, dtype=np.float32)
     chosen_pil = pil
 elif mode == "Pick by ImageID (from a folder)":
@@ -216,7 +218,6 @@ else:
 col_img, col_tbl = st.columns([1, 1.5])
 with col_img:
     st.subheader("Input image")
-    # use_container_width=True is correct for newer Streamlit versions
     st.image(chosen_pil, caption=chosen_img_path.name if chosen_img_path else "uploaded", use_container_width=True)
 
 # Predict & table
@@ -227,7 +228,6 @@ if img_np is not None:
 
     with col_tbl:
         st.subheader("Per-mobility-aid predictions")
-        # Using your original simpler styling which avoids the bug I introduced
         st.dataframe(
             df_out.style.format({"p_no": "{:.3f}", "p_unsure": "{:.3f}", "p_yes": "{:.3f}"}),
             use_container_width=True,
