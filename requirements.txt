@@ -1,5 +1,6 @@
 # ---- Core runtime (CPU) ----
-tensorflow
+tensorflow-cpu
+keras
 
 # ---- App/UI ----
 streamlit
@@ -14,3 +15,12 @@ protobuf
 
 # ---- Only needed if you load .h5 checkpoints (safe to keep)
 h5py
+
+# --- VLM / CLIP path ---
+torch
+torchvision
+open_clip_torch
+joblib
+scikit-learn
+
+typing-extensions
