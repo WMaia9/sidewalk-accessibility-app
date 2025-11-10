@@ -1,0 +1,28 @@
+{
+  "aid": "Walking cane",
+  "class_names": [
+    "no",
+    "unsure",
+    "yes"
+  ],
+  "cls_to_id": {
+    "no": 0,
+    "unsure": 1,
+    "yes": 2
+  },
+  "id_to_cls": {
+    "0": "no",
+    "1": "unsure",
+    "2": "yes"
+  },
+  "tau": 0.4,
+  "margin": 0.0,
+  "ent_tau": 1.2,
+  "feature_norm": true,
+  "backbone": "open_clip::ViT-B-32::openai",
+  "classes_seen": [
+    0,
+    1,
+    2
+  ]
+}
